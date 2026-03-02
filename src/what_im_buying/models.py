@@ -19,3 +19,34 @@ class Invoice:
     issued_at: datetime | None
     total_amount: float | None
     raw_html_hash: str
+
+
+@dataclass(slots=True)
+class NormalizationEnrichment:
+    item_id: int
+    raw_name: str
+    canonical_name: str
+    brand: str | None
+    size_value: float | None
+    size_unit: str | None
+    pack_count: int | None
+    unit_type: str | None
+    confidence: float
+    needs_review: bool
+
+
+@dataclass(slots=True)
+class CategorizationEnrichment:
+    item_id: int
+    raw_name: str
+    normalized_name: str
+    category_key: str
+    confidence: float
+    needs_review: bool
+    reason: str
+
+
+@dataclass(slots=True)
+class CategorySummary:
+    category_key: str
+    count: int

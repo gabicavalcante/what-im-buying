@@ -5,6 +5,7 @@ import sqlite3
 
 import streamlit as st
 
+from what_im_buying.categories import CATEGORY_LABELS_PTBR
 from what_im_buying.storage import connect as storage_connect
 from what_im_buying.storage import init_db
 
@@ -52,6 +53,28 @@ def parse_output_json(raw: str) -> dict | str:
         return json.loads(raw)
     except json.JSONDecodeError:
         return raw
+
+
+def load_latest_categorization_by_item(conn: sqlite3.Connection, invoice_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT ie.item_id, ie.output_json
+        FROM item_enrichment ie
+        JOIN items i ON i.id = ie.item_id
+        WHERE i.invoice_id = ? AND ie.stage = 'categorize'
+        ORDER BY ie.id DESC
+        """,
+        (invoice_id,),
+    ).fetchall()
+    latest_by_item: dict[int, dict] = {}
+    for row in rows:
+        item_id = int(row["item_id"])
+        if item_id in latest_by_item:
+            continue
+        parsed = parse_output_json(row["output_json"])
+        if isinstance(parsed, dict):
+            latest_by_item[item_id] = parsed
+    return list(latest_by_item.values())
 
 
 def main() -> None:
@@ -140,6 +163,43 @@ def main() -> None:
                 ):
                     st.write("created_at:", enr["created_at"])
                     st.json(parse_output_json(enr["output_json"]))
+
+    st.subheader("Latest categorization")
+    categorized = load_latest_categorization_by_item(conn, selected_id)
+    if not categorized:
+        st.info("No categorization found for this invoice. Run: categorize-last-invoice")
+    else:
+        st.dataframe(
+            [
+                {
+                    "item_id": item.get("item_id"),
+                    "raw_name": item.get("raw_name"),
+                    "normalized_name": item.get("normalized_name"),
+                    "category_key": item.get("category_key"),
+                    "category_label_ptbr": CATEGORY_LABELS_PTBR.get(str(item.get("category_key")), "Outros"),
+                    "confidence": item.get("confidence"),
+                    "needs_review": item.get("needs_review"),
+                }
+                for item in categorized
+            ],
+            use_container_width=True,
+        )
+        counts: dict[str, int] = {}
+        for item in categorized:
+            key = str(item.get("category_key"))
+            counts[key] = counts.get(key, 0) + 1
+        st.caption("Summary")
+        st.dataframe(
+            [
+                {
+                    "category_key": key,
+                    "category_label_ptbr": CATEGORY_LABELS_PTBR.get(key, "Outros"),
+                    "count": count,
+                }
+                for key, count in sorted(counts.items(), key=lambda x: -x[1])
+            ],
+            use_container_width=True,
+        )
 
 
 if __name__ == "__main__":

@@ -4,6 +4,8 @@ import json
 import os
 from typing import Any
 
+from .models import NormalizationEnrichment
+
 
 def build_normalization_prompt(items: list[dict[str, Any]]) -> str:
     return (
@@ -34,13 +36,20 @@ def build_normalization_prompt(items: list[dict[str, Any]]) -> str:
     )
 
 
-def generate_normalized_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def generate_normalized_items(items: list[dict[str, Any]]) -> list[NormalizationEnrichment]:
     prompt = build_normalization_prompt(items)
     output_text = _generate_text(prompt)
     payload = _extract_json_object(output_text)
-    normalized = payload.get("items")
-    if not isinstance(normalized, list):
+    normalized_raw = payload.get("items")
+    
+    if not isinstance(normalized_raw, list):
         raise RuntimeError("Invalid normalization response: missing items array")
+    
+    normalized: list[NormalizationEnrichment] = []
+    for row in normalized_raw:
+        if not isinstance(row, dict):
+            continue
+        normalized.append(_normalization_from_dict(row))
     return normalized
 
 
@@ -70,12 +79,29 @@ def _extract_json_object(text: str) -> dict[str, Any]:
             raw = raw[4:].strip()
     try:
         payload = json.loads(raw)
+        
     except json.JSONDecodeError:
         start = raw.find("{")
         end = raw.rfind("}")
         if start == -1 or end == -1 or end <= start:
             raise RuntimeError("Model did not return valid JSON")
         payload = json.loads(raw[start : end + 1])
+        
     if not isinstance(payload, dict):
         raise RuntimeError("Expected JSON object")
     return payload
+
+
+def _normalization_from_dict(data: dict[str, Any]) -> NormalizationEnrichment:
+    return NormalizationEnrichment(
+        item_id=int(data["item_id"]),
+        raw_name=str(data.get("raw_name", "")),
+        canonical_name=str(data.get("canonical_name", "")),
+        brand=str(data["brand"]) if data.get("brand") not in (None, "") else None,
+        size_value=float(data["size_value"]) if data.get("size_value") not in (None, "") else None,
+        size_unit=str(data["size_unit"]) if data.get("size_unit") not in (None, "") else None,
+        pack_count=int(data["pack_count"]) if data.get("pack_count") not in (None, "") else None,
+        unit_type=str(data["unit_type"]) if data.get("unit_type") not in (None, "") else None,
+        confidence=float(data.get("confidence", 0.0)),
+        needs_review=bool(data.get("needs_review", False)),
+    )

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
@@ -44,7 +45,6 @@ def init_db(conn: sqlite3.Connection) -> None:
         )
         """
     )
-    _migrate_items_columns(conn)
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS item_enrichment (
@@ -142,24 +142,30 @@ def get_items_by_invoice(conn: sqlite3.Connection, invoice_id: int) -> list[sqli
 def save_item_enrichments(
     conn: sqlite3.Connection,
     stage: str,
-    enrichments: list[dict[str, Any]],
+    enrichments: list[Any],
 ) -> int:
     rows_to_insert: list[tuple[int, str, str]] = []
     for enrichment in enrichments:
-        item_id = enrichment.get("item_id")
+        payload = _enrichment_to_dict(enrichment)
+        item_id = payload.get("item_id")
+        
         if isinstance(item_id, str) and item_id.isdigit():
             item_id = int(item_id)
+            
         if not isinstance(item_id, int):
             continue
+        
         rows_to_insert.append(
             (
                 item_id,
                 stage,
-                json.dumps(enrichment, ensure_ascii=True),
+                json.dumps(payload, ensure_ascii=True),
             )
         )
+    
     if not rows_to_insert:
         return 0
+    
     conn.executemany(
         """
         INSERT INTO item_enrichment (item_id, stage, output_json)
@@ -171,15 +177,13 @@ def save_item_enrichments(
     return len(rows_to_insert)
 
 
-def _migrate_items_columns(conn: sqlite3.Connection) -> None:
-    cols = _table_columns(conn, "items")
-    if "description" in cols and "raw_name" not in cols:
-        conn.execute("ALTER TABLE items RENAME COLUMN description TO raw_name")
-    cols = _table_columns(conn, "items")
-    if "canonical_name" in cols and "normalized_name" not in cols:
-        conn.execute("ALTER TABLE items RENAME COLUMN canonical_name TO normalized_name")
 
 
-def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
-    rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
-    return {str(row["name"]) for row in rows}
+def _enrichment_to_dict(enrichment: Any) -> dict[str, Any]:
+    if is_dataclass(enrichment):
+        return asdict(enrichment)
+    
+    if isinstance(enrichment, dict):
+        return enrichment
+    
+    raise TypeError("Enrichment must be a dataclass instance or dict")

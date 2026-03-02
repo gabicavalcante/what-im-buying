@@ -6,6 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from .ai import generate_normalized_items
+from .categories import CATEGORY_LABELS_PTBR, categorize_item, summarize_categories
 from .parser import fetch_invoice_html, parse_invoice
 from .storage import (
     connect,
@@ -31,6 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     import_html.add_argument("--url", default="local://invoice", help="Logical source URL.")
 
     subparsers.add_parser("normalize-last-invoice", help="Normalize items from latest invoice using AI.")
+    subparsers.add_parser("categorize-last-invoice", help="Categorize items from latest invoice.")
     return parser
 
 
@@ -94,6 +96,35 @@ def cmd_normalize_last_invoice(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_categorize_last_invoice(args: argparse.Namespace) -> int:
+    conn = connect(args.db)
+    init_db(conn)
+    invoice_id = get_latest_invoice_id(conn)
+    if invoice_id is None:
+        print("No invoices found. Parse an invoice first.")
+        return 1
+
+    items = get_items_by_invoice(conn, invoice_id)
+    if not items:
+        print(f"Invoice {invoice_id} has no items.")
+        return 1
+
+    categorized = [
+        categorize_item(
+            {
+                "item_id": int(row["id"]),
+                "raw_name": str(row["raw_name"]),
+                "normalized_name": str(row["normalized_name"]),
+            }
+        )
+        for row in items
+    ]
+    saved = save_item_enrichments(conn, stage="categorize", enrichments=categorized)
+    print(f"Categorized {saved} items for invoice {invoice_id}.")
+    _print_category_summary(categorized)
+    return 0
+
+
 def _print_items(items) -> None:
     for item in items:
         print(
@@ -108,18 +139,26 @@ def _print_normalized_items(items) -> None:
             "- item_id={item_id} | raw='{raw_name}' | canonical='{canonical_name}' | "
             "brand={brand} | size={size_value} {size_unit} | pack={pack_count} | unit_type={unit_type} | "
             "confidence={confidence} | needs_review={needs_review}".format(
-                item_id=item.get("item_id"),
-                raw_name=item.get("raw_name"),
-                canonical_name=item.get("canonical_name"),
-                brand=item.get("brand"),
-                size_value=item.get("size_value"),
-                size_unit=item.get("size_unit"),
-                pack_count=item.get("pack_count"),
-                unit_type=item.get("unit_type"),
-                confidence=item.get("confidence"),
-                needs_review=item.get("needs_review"),
+                item_id=item.item_id,
+                raw_name=item.raw_name,
+                canonical_name=item.canonical_name,
+                brand=item.brand,
+                size_value=item.size_value,
+                size_unit=item.size_unit,
+                pack_count=item.pack_count,
+                unit_type=item.unit_type,
+                confidence=item.confidence,
+                needs_review=item.needs_review,
             )
         )
+
+
+def _print_category_summary(items) -> None:
+    summary = summarize_categories(items)
+    print("Category summary:")
+    for row in summary:
+        label = CATEGORY_LABELS_PTBR.get(row.category_key, row.category_key)
+        print(f"- {row.category_key} ({label}): {row.count}")
 
 
 def main() -> int:
@@ -133,6 +172,8 @@ def main() -> int:
         return cmd_import_html(args)
     if args.command == "normalize-last-invoice":
         return cmd_normalize_last_invoice(args)
+    if args.command == "categorize-last-invoice":
+        return cmd_categorize_last_invoice(args)
     parser.error(f"Unknown command: {args.command}")
     return 2
 

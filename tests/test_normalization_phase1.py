@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 
 from src.what_im_buying.ai import _extract_json_object
+from src.what_im_buying.models import NormalizationEnrichment
 from src.what_im_buying.storage import init_db, save_item_enrichments
 
 
@@ -36,18 +37,18 @@ def test_save_item_enrichments_accepts_numeric_item_id_string() -> None:
         conn,
         stage="normalize",
         enrichments=[
-            {
-                "item_id": "1",
-                "raw_name": "LEITE",
-                "canonical_name": "leite integral",
-                "brand": None,
-                "size_value": 1,
-                "size_unit": "L",
-                "pack_count": 1,
-                "unit_type": "un",
-                "confidence": 0.8,
-                "needs_review": False,
-            }
+            NormalizationEnrichment(
+                item_id=1,
+                raw_name="LEITE",
+                canonical_name="leite integral",
+                brand=None,
+                size_value=1.0,
+                size_unit="L",
+                pack_count=1,
+                unit_type="un",
+                confidence=0.8,
+                needs_review=False,
+            )
         ],
     )
     assert saved == 1

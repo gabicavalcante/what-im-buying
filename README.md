@@ -38,6 +38,12 @@ Normalize latest invoice items (Phase 1 spike):
 python -m src.what_im_buying.cli normalize-last-invoice
 ```
 
+Categorize latest invoice items (Phase 2 spike):
+
+```bash
+python -m src.what_im_buying.cli categorize-last-invoice
+```
+
 Run minimal viewer UI:
 
 ```bash
