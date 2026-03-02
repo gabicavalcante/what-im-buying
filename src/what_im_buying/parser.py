@@ -181,11 +181,25 @@ def _extract_issued_at(soup: BeautifulSoup) -> datetime | None:
 
 
 def _extract_total_amount(soup: BeautifulSoup) -> float | None:
+    # Prefer structured total blocks on SP responsive layout.
+    total_nota = soup.find(id="totalNota")
+    if total_nota is not None:
+        for line in total_nota.find_all(id="linhaTotal"):
+            label = line.find("label")
+            value = line.find("span", class_="totalNumb")
+            if not label or not value:
+                continue
+            label_text = label.get_text(" ", strip=True).lower()
+            if "valor a pagar" in label_text or "valor total" in label_text:
+                parsed = parse_brl_number(value.get_text(" ", strip=True))
+                if parsed is not None:
+                    return parsed
+
+    # Fallback to explicit currency-labeled totals only.
     text = soup.get_text(" ", strip=True)
     patterns = [
-        r"valor a pagar\s*R?\$?\s*[:\-]?\s*([\d\.,]+)",
-        r"valor total\s*R?\$?\s*[:\-]?\s*([\d\.,]+)",
-        r"total\s*[:\-]?\s*R?\$?\s*([\d\.,]+)",
+        r"valor a pagar\s*R\$\s*[:\-]?\s*([\d\.,]+)",
+        r"valor total\s*R\$\s*[:\-]?\s*([\d\.,]+)",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, flags=re.I)
