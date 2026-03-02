@@ -95,11 +95,11 @@ def _extract_items_from_tab_result(soup: BeautifulSoup) -> list[InvoiceItem]:
 
         parsed_items.append(
             InvoiceItem(
-                description=description,
+                raw_name=description,
                 quantity=quantity,
                 unit_price=unit_price,
                 total_price=total_price,
-                canonical_name=normalize_product_name(description),
+                normalized_name=normalize_product_name(description),
             )
         )
     return parsed_items
@@ -154,11 +154,11 @@ def _parse_row(cells: list[str], headers: list[str]) -> InvoiceItem | None:
     canonical_name = normalize_product_name(description)
 
     return InvoiceItem(
-        description=description,
+        raw_name=description,
         quantity=quantity,
         unit_price=unit_price,
         total_price=total_price,
-        canonical_name=canonical_name,
+        normalized_name=canonical_name,
     )
 
 

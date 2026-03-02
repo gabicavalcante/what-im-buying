@@ -1,0 +1,15 @@
+README.md
+setup.cfg
+setup.py
+src/what_im_buying/__init__.py
+src/what_im_buying/ai.py
+src/what_im_buying/cli.py
+src/what_im_buying/models.py
+src/what_im_buying/parser.py
+src/what_im_buying/storage.py
+src/what_im_buying/text_utils.py
+src/what_im_buying/viewer.py
+src/what_im_buying.egg-info/PKG-INFO
+src/what_im_buying.egg-info/SOURCES.txt
+src/what_im_buying.egg-info/dependency_links.txt
+src/what_im_buying.egg-info/top_level.txt

@@ -6,11 +6,11 @@ from datetime import datetime
 
 @dataclass(slots=True)
 class InvoiceItem:
-    description: str
+    raw_name: str
     quantity: float | None
     unit_price: float | None
     total_price: float
-    canonical_name: str
+    normalized_name: str
 
 
 @dataclass(slots=True)

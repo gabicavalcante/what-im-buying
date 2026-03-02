@@ -34,8 +34,8 @@ def init_db(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             invoice_id INTEGER NOT NULL,
-            description TEXT NOT NULL,
-            canonical_name TEXT NOT NULL,
+            raw_name TEXT NOT NULL,
+            normalized_name TEXT NOT NULL,
             quantity REAL NULL,
             unit_price REAL NULL,
             total_price REAL NOT NULL,
@@ -44,6 +44,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    _migrate_items_columns(conn)
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS item_enrichment (
@@ -92,14 +93,14 @@ def save_invoice(conn: sqlite3.Connection, invoice: Invoice, items: list[Invoice
     invoice_id = int(cursor.lastrowid)
     conn.executemany(
         """
-        INSERT INTO items (invoice_id, description, canonical_name, quantity, unit_price, total_price)
+        INSERT INTO items (invoice_id, raw_name, normalized_name, quantity, unit_price, total_price)
         VALUES (?, ?, ?, ?, ?, ?)
         """,
         [
             (
                 invoice_id,
-                item.description,
-                item.canonical_name,
+                item.raw_name,
+                item.normalized_name,
                 item.quantity,
                 item.unit_price,
                 item.total_price,
@@ -128,7 +129,7 @@ def get_latest_invoice_id(conn: sqlite3.Connection) -> int | None:
 def get_items_by_invoice(conn: sqlite3.Connection, invoice_id: int) -> list[sqlite3.Row]:
     rows = conn.execute(
         """
-        SELECT id, description, canonical_name, quantity, unit_price, total_price
+        SELECT id, raw_name, normalized_name, quantity, unit_price, total_price
         FROM items
         WHERE invoice_id = ?
         ORDER BY id
@@ -168,3 +169,17 @@ def save_item_enrichments(
     )
     conn.commit()
     return len(rows_to_insert)
+
+
+def _migrate_items_columns(conn: sqlite3.Connection) -> None:
+    cols = _table_columns(conn, "items")
+    if "description" in cols and "raw_name" not in cols:
+        conn.execute("ALTER TABLE items RENAME COLUMN description TO raw_name")
+    cols = _table_columns(conn, "items")
+    if "canonical_name" in cols and "normalized_name" not in cols:
+        conn.execute("ALTER TABLE items RENAME COLUMN canonical_name TO normalized_name")
+
+
+def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    return {str(row["name"]) for row in rows}
