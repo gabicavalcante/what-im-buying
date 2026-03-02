@@ -11,6 +11,7 @@ from .parser import fetch_invoice_html, parse_invoice
 from .storage import (
     connect,
     get_items_by_invoice,
+    get_latest_item_enrichment_by_stage,
     get_latest_invoice_id,
     init_db,
     save_invoice,
@@ -109,12 +110,15 @@ def cmd_categorize_last_invoice(args: argparse.Namespace) -> int:
         print(f"Invoice {invoice_id} has no items.")
         return 1
 
+    latest_normalize = get_latest_item_enrichment_by_stage(conn, invoice_id, "normalize")
     categorized = [
         categorize_item(
             {
                 "item_id": int(row["id"]),
                 "raw_name": str(row["raw_name"]),
-                "normalized_name": str(row["normalized_name"]),
+                "normalized_name": str(
+                    latest_normalize.get(int(row["id"]), {}).get("canonical_name") or row["normalized_name"]
+                ),
             }
         )
         for row in items

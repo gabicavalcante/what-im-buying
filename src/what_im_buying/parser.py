@@ -189,6 +189,7 @@ def _extract_total_amount(soup: BeautifulSoup) -> float | None:
             value = line.find("span", class_="totalNumb")
             if not label or not value:
                 continue
+            
             label_text = label.get_text(" ", strip=True).lower()
             if "valor a pagar" in label_text or "valor total" in label_text:
                 parsed = parse_brl_number(value.get_text(" ", strip=True))

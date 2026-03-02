@@ -55,16 +55,16 @@ def parse_output_json(raw: str) -> dict | str:
         return raw
 
 
-def load_latest_categorization_by_item(conn: sqlite3.Connection, invoice_id: int) -> list[dict]:
+def load_latest_enrichment_by_item(conn: sqlite3.Connection, invoice_id: int, stage: str) -> dict[int, dict]:
     rows = conn.execute(
         """
         SELECT ie.item_id, ie.output_json
         FROM item_enrichment ie
         JOIN items i ON i.id = ie.item_id
-        WHERE i.invoice_id = ? AND ie.stage = 'categorize'
+        WHERE i.invoice_id = ? AND ie.stage = ?
         ORDER BY ie.id DESC
         """,
-        (invoice_id,),
+        (invoice_id, stage),
     ).fetchall()
     latest_by_item: dict[int, dict] = {}
     for row in rows:
@@ -74,7 +74,15 @@ def load_latest_categorization_by_item(conn: sqlite3.Connection, invoice_id: int
         parsed = parse_output_json(row["output_json"])
         if isinstance(parsed, dict):
             latest_by_item[item_id] = parsed
-    return list(latest_by_item.values())
+    return latest_by_item
+
+
+def format_brl(value: float | int | None) -> str:
+    if value is None:
+        return "-"
+    formatted = f"{float(value):,.2f}"
+    formatted = formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"R$ {formatted}"
 
 
 def main() -> None:
@@ -126,80 +134,91 @@ def main() -> None:
         }
     )
 
-    col1, col2 = st.columns(2)
+    st.subheader("Items + Categorization")
+    items = load_items(conn, selected_id)
+    categorized_by_item = load_latest_enrichment_by_item(conn, selected_id, "categorize")
+    normalized_by_item = load_latest_enrichment_by_item(conn, selected_id, "normalize")
 
-    with col1:
-        st.subheader("Items")
-        items = load_items(conn, selected_id)
-        st.caption(f"{len(items)} items")
-        if not items:
-            st.info("No items found for this invoice.")
-        else:
-            st.dataframe(
-                [
-                    {
-                        "item_id": int(item["id"]),
-                        "raw_name": item["raw_name"],
-                        "normalized_name": item["normalized_name"],
-                        "quantity": item["quantity"],
-                        "unit_price": item["unit_price"],
-                        "total_price": item["total_price"],
-                    }
-                    for item in items
-                ],
-                use_container_width=True,
-            )
-
-    with col2:
-        st.subheader("Enrichments")
-        enrichments = load_enrichments_for_invoice(conn, selected_id)
-        st.caption(f"{len(enrichments)} records")
-        if not enrichments:
-            st.info("No enrichments found for this invoice.")
-        else:
-            for enr in enrichments:
-                with st.expander(
-                    f"enrichment #{int(enr['id'])} | item {int(enr['item_id'])} | stage={enr['stage']}"
-                ):
-                    st.write("created_at:", enr["created_at"])
-                    st.json(parse_output_json(enr["output_json"]))
-
-    st.subheader("Latest categorization")
-    categorized = load_latest_categorization_by_item(conn, selected_id)
-    if not categorized:
-        st.info("No categorization found for this invoice. Run: categorize-last-invoice")
+    if not items:
+        st.info("No items found for this invoice.")
     else:
-        st.dataframe(
-            [
+        available_keys = sorted(
+            {str(payload.get("category_key")) for payload in categorized_by_item.values() if payload.get("category_key")}
+        )
+        if "uncategorized" not in available_keys:
+            available_keys.append("uncategorized")
+        selected_keys = st.multiselect(
+            "Filter categories",
+            options=available_keys,
+            default=available_keys,
+        )
+        merged_rows: list[dict] = []
+        for item in items:
+            item_id = int(item["id"])
+            cat = categorized_by_item.get(item_id, {})
+            category_key = str(cat.get("category_key") or "uncategorized")
+            if category_key not in selected_keys:
+                continue
+            total_price_value = float(item["total_price"] or 0.0)
+            merged_rows.append(
                 {
-                    "item_id": item.get("item_id"),
-                    "raw_name": item.get("raw_name"),
-                    "normalized_name": item.get("normalized_name"),
-                    "category_key": item.get("category_key"),
-                    "category_label_ptbr": CATEGORY_LABELS_PTBR.get(str(item.get("category_key")), "Outros"),
-                    "confidence": item.get("confidence"),
-                    "needs_review": item.get("needs_review"),
+                    "item_id": item_id,
+                    "raw_name": item["raw_name"],
+                    "canonical_name": normalized_by_item.get(item_id, {}).get("canonical_name", item["normalized_name"]),
+                    "quantity": item["quantity"],
+                    "unit_price_brl": format_brl(item["unit_price"]),
+                    "total_price_brl": format_brl(total_price_value),
+                    "_total_price_value": total_price_value,
+                    "category_key": category_key,
+                    "category_label_ptbr": CATEGORY_LABELS_PTBR.get(category_key, "Nao categorizado"),
+                    "confidence": cat.get("confidence"),
+                    "needs_review": cat.get("needs_review"),
                 }
-                for item in categorized
-            ],
+            )
+        table_rows = [{k: v for k, v in row.items() if k != "_total_price_value"} for row in merged_rows]
+        st.dataframe(
+            table_rows,
             use_container_width=True,
         )
-        counts: dict[str, int] = {}
-        for item in categorized:
-            key = str(item.get("category_key"))
-            counts[key] = counts.get(key, 0) + 1
-        st.caption("Summary")
+
+        summary: dict[str, dict[str, float | int]] = {}
+        for item in merged_rows:
+            key = str(item["category_key"])
+            if key not in summary:
+                summary[key] = {"count": 0, "total_spend": 0.0}
+            summary[key]["count"] = int(summary[key]["count"]) + 1
+            summary[key]["total_spend"] = float(summary[key]["total_spend"]) + float(item["_total_price_value"])
+
+        total_filtered = sum(float(item["_total_price_value"]) for item in merged_rows)
+        st.metric("Total gasto (filtro atual)", format_brl(total_filtered))
+        st.caption("Summary (count and spend)")
         st.dataframe(
             [
                 {
                     "category_key": key,
-                    "category_label_ptbr": CATEGORY_LABELS_PTBR.get(key, "Outros"),
-                    "count": count,
+                    "category_label_ptbr": CATEGORY_LABELS_PTBR.get(key, "Nao categorizado"),
+                    "count": int(values["count"]),
+                    "total_spend": round(float(values["total_spend"]), 2),
+                    "total_spend_brl": format_brl(float(values["total_spend"])),
                 }
-                for key, count in sorted(counts.items(), key=lambda x: -x[1])
+                for key, values in sorted(
+                    summary.items(),
+                    key=lambda x: (-float(x[1]["total_spend"]), -int(x[1]["count"]), x[0]),
+                )
             ],
             use_container_width=True,
         )
+
+    st.subheader("Raw enrichment records")
+    enrichments = load_enrichments_for_invoice(conn, selected_id)
+    st.caption(f"{len(enrichments)} records")
+    if not enrichments:
+        st.info("No enrichments found for this invoice.")
+    else:
+        for enr in enrichments:
+            with st.expander(f"enrichment #{int(enr['id'])} | item {int(enr['item_id'])} | stage={enr['stage']}"):
+                st.write("created_at:", enr["created_at"])
+                st.json(parse_output_json(enr["output_json"]))
 
 
 if __name__ == "__main__":

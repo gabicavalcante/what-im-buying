@@ -177,6 +177,35 @@ def save_item_enrichments(
     return len(rows_to_insert)
 
 
+def get_latest_item_enrichment_by_stage(
+    conn: sqlite3.Connection,
+    invoice_id: int,
+    stage: str,
+) -> dict[int, dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT ie.item_id, ie.output_json
+        FROM item_enrichment ie
+        JOIN items i ON i.id = ie.item_id
+        WHERE i.invoice_id = ? AND ie.stage = ?
+        ORDER BY ie.id DESC
+        """,
+        (invoice_id, stage),
+    ).fetchall()
+    latest_by_item: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        item_id = int(row["item_id"])
+        if item_id in latest_by_item:
+            continue
+        try:
+            payload = json.loads(str(row["output_json"]))
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            latest_by_item[item_id] = payload
+    return latest_by_item
+
+
 
 
 def _enrichment_to_dict(enrichment: Any) -> dict[str, Any]:
