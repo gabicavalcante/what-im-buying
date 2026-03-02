@@ -31,8 +31,6 @@ def build_parser() -> argparse.ArgumentParser:
     import_html.add_argument("--url", default="local://invoice", help="Logical source URL.")
 
     subparsers.add_parser("normalize-last-invoice", help="Normalize items from latest invoice using AI.")
-    legacy = subparsers.add_parser("normalize-last-intake", help=argparse.SUPPRESS)
-    legacy.set_defaults(_deprecated_alias="normalize-last-invoice")
     return parser
 
 
@@ -129,14 +127,10 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
-    if getattr(args, "_deprecated_alias", None):
-        print("Warning: 'normalize-last-intake' is deprecated; use 'normalize-last-invoice'.")
     if args.command == "parse-url":
         return cmd_parse_url(args)
     if args.command == "import-html":
         return cmd_import_html(args)
-    if args.command == "normalize-last-intake":
-        return cmd_normalize_last_invoice(args)
     if args.command == "normalize-last-invoice":
         return cmd_normalize_last_invoice(args)
     parser.error(f"Unknown command: {args.command}")
