@@ -44,6 +44,8 @@ Categorize latest invoice items (Phase 2 spike):
 python -m src.what_im_buying.cli categorize-last-invoice
 ```
 
+`categorize-last-invoice` also uses AI and requires `OPENAI_API_KEY` in `.env`.
+
 Run minimal viewer UI:
 
 ```bash

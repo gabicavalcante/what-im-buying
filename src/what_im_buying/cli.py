@@ -5,8 +5,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from .ai import generate_normalized_items
-from .categories import CATEGORY_LABELS_PTBR, categorize_item, summarize_categories
+from .ai import generate_categorized_items, generate_normalized_items
+from .categories import CATEGORY_LABELS_PTBR, summarize_categories
 from .parser import fetch_invoice_html, parse_invoice
 from .storage import (
     connect,
@@ -111,18 +111,15 @@ def cmd_categorize_last_invoice(args: argparse.Namespace) -> int:
         return 1
 
     latest_normalize = get_latest_item_enrichment_by_stage(conn, invoice_id, "normalize")
-    categorized = [
-        categorize_item(
-            {
-                "item_id": int(row["id"]),
-                "raw_name": str(row["raw_name"]),
-                "normalized_name": str(
-                    latest_normalize.get(int(row["id"]), {}).get("canonical_name") or row["normalized_name"]
-                ),
-            }
-        )
+    payload = [
+        {
+            "item_id": int(row["id"]),
+            "raw_name": str(row["raw_name"]),
+            "normalized_name": str(latest_normalize.get(int(row["id"]), {}).get("canonical_name") or row["normalized_name"]),
+        }
         for row in items
     ]
+    categorized = generate_categorized_items(payload)
     saved = save_item_enrichments(conn, stage="categorize", enrichments=categorized)
     print(f"Categorized {saved} items for invoice {invoice_id}.")
     _print_category_summary(categorized)
