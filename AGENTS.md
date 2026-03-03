@@ -42,13 +42,21 @@ This document defines engineering standards and collaboration rules for contribu
   - relevant payload identifiers (never secrets)
 - Use `LOGGER.exception` for unexpected exceptions that are handled/re-raised.
 
-## Architecture Rules
+## Architecture Rules (Current State)
 
-- Keep business logic in use-case functions.
-- Services should be granular, single-purpose, and function-based.
-- Prefer functions over classes for services and use cases.
-- Keep persistence concerns in storage modules and presentation concerns in CLI/UI modules.
-- Minimize side effects; pass explicit data structures between layers.
+- Keep modules focused by responsibility:
+  - parsing in parser modules
+  - persistence in storage modules
+  - AI contracts/transforms in AI modules
+  - presentation in CLI/UI modules
+- Prefer small, function-based units over premature class hierarchies.
+- Keep side effects localized; pass explicit data structures between layers.
+- Avoid introducing architectural layers that are not yet used in practice.
+
+## Architecture Direction (Future)
+
+- Target architecture can evolve toward explicit use-case/service boundaries once scope stabilizes.
+- Until then, prioritize clarity, testability, and low-complexity module boundaries.
 
 ## Data Modeling and Persistence
 
@@ -109,4 +117,3 @@ This document defines engineering standards and collaboration rules for contribu
   - categories: `src/what_im_buying/categories.py`
   - CLI: `src/what_im_buying/cli.py`
   - viewer: `src/what_im_buying/viewer.py`
-

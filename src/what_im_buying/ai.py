@@ -85,14 +85,18 @@ def generate_categorized_items(items: list[dict[str, Any]]) -> list[Categorizati
     prompt = build_categorization_prompt(items)
     output_text = _generate_text(prompt)
     payload = _extract_json_object(output_text)
+    
     categorized_raw = payload.get("items")
+    
     if not isinstance(categorized_raw, list):
         raise RuntimeError("Invalid categorization response: missing items array")
+    
     categorized: list[CategorizationEnrichment] = []
     for row in categorized_raw:
         if not isinstance(row, dict):
             continue
         categorized.append(_categorization_from_dict(row))
+        
     return categorized
 
 
