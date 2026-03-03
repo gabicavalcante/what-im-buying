@@ -192,17 +192,21 @@ def get_latest_item_enrichment_by_stage(
         """,
         (invoice_id, stage),
     ).fetchall()
+    
     latest_by_item: dict[int, dict[str, Any]] = {}
     for row in rows:
         item_id = int(row["item_id"])
         if item_id in latest_by_item:
             continue
+        
         try:
             payload = json.loads(str(row["output_json"]))
         except json.JSONDecodeError:
             continue
+        
         if isinstance(payload, dict):
             latest_by_item[item_id] = payload
+            
     return latest_by_item
 
 
