@@ -45,8 +45,10 @@ def cmd_parse_url(args: argparse.Namespace) -> int:
         output.write_text(raw_html, encoding="utf-8")
 
     invoice, items = parse_invoice(raw_html, url=args.url)
+    
     conn = connect(args.db)
     init_db(conn)
+    
     invoice_id = save_invoice(conn, invoice, items)
     print(f"Invoice {invoice_id} saved with {len(items)} items.")
     _print_items(items)
@@ -56,8 +58,10 @@ def cmd_parse_url(args: argparse.Namespace) -> int:
 def cmd_import_html(args: argparse.Namespace) -> int:
     html = Path(args.file).read_text(encoding="utf-8")
     invoice, items = parse_invoice(html, url=args.url)
+    
     conn = connect(args.db)
     init_db(conn)
+    
     invoice_id = save_invoice(conn, invoice, items)
     print(f"Invoice {invoice_id} saved with {len(items)} items from {args.file}.")
     _print_items(items)
@@ -67,6 +71,7 @@ def cmd_import_html(args: argparse.Namespace) -> int:
 def cmd_normalize_last_invoice(args: argparse.Namespace) -> int:
     conn = connect(args.db)
     init_db(conn)
+
     invoice_id = get_latest_invoice_id(conn)
     if invoice_id is None:
         print("No invoices found. Parse an invoice first.")
@@ -84,14 +89,13 @@ def cmd_normalize_last_invoice(args: argparse.Namespace) -> int:
                 "item_id": int(row["id"]),
                 "raw_name": str(row["raw_name"]),
                 "normalized_name": str(row["normalized_name"]),
-                "quantity": row["quantity"],
-                "unit_price": row["unit_price"],
-                "total_price": row["total_price"],
+                "unit_type": row["unit_type"],
             }
         )
 
     normalized = generate_normalized_items(payload)
     saved = save_item_enrichments(conn, stage="normalize", enrichments=normalized)
+    
     print(f"Normalized {saved} items for invoice {invoice_id}.")
     _print_normalized_items(normalized)
     return 0
@@ -100,6 +104,7 @@ def cmd_normalize_last_invoice(args: argparse.Namespace) -> int:
 def cmd_categorize_last_invoice(args: argparse.Namespace) -> int:
     conn = connect(args.db)
     init_db(conn)
+    
     invoice_id = get_latest_invoice_id(conn)
     if invoice_id is None:
         print("No invoices found. Parse an invoice first.")
@@ -119,8 +124,10 @@ def cmd_categorize_last_invoice(args: argparse.Namespace) -> int:
         }
         for row in items
     ]
+    
     categorized = generate_categorized_items(payload)
     saved = save_item_enrichments(conn, stage="categorize", enrichments=categorized)
+    
     print(f"Categorized {saved} items for invoice {invoice_id}.")
     _print_category_summary(categorized)
     return 0
@@ -129,7 +136,7 @@ def cmd_categorize_last_invoice(args: argparse.Namespace) -> int:
 def _print_items(items) -> None:
     for item in items:
         print(
-            f"- {item.raw_name} | qty={item.quantity} | unit={item.unit_price} | "
+            f"- {item.raw_name} | qty={item.quantity} {item.unit_type} | unit_price={item.unit_price} | "
             f"total={item.total_price}"
         )
 
@@ -138,16 +145,14 @@ def _print_normalized_items(items) -> None:
     for item in items:
         print(
             "- item_id={item_id} | raw='{raw_name}' | canonical='{canonical_name}' | "
-            "brand={brand} | size={size_value} {size_unit} | pack={pack_count} | unit_type={unit_type} | "
+            "brand={brand} | unit_type={unit_type} ({unit_type_full}) | "
             "confidence={confidence} | needs_review={needs_review}".format(
                 item_id=item.item_id,
                 raw_name=item.raw_name,
                 canonical_name=item.canonical_name,
                 brand=item.brand,
-                size_value=item.size_value,
-                size_unit=item.size_unit,
-                pack_count=item.pack_count,
                 unit_type=item.unit_type,
+                unit_type_full=item.unit_type_full,
                 confidence=item.confidence,
                 needs_review=item.needs_review,
             )

@@ -38,6 +38,7 @@ def init_db(conn: sqlite3.Connection) -> None:
             raw_name TEXT NOT NULL,
             normalized_name TEXT NOT NULL,
             quantity REAL NULL,
+            unit_type TEXT NULL,
             unit_price REAL NULL,
             total_price REAL NOT NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -45,6 +46,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    _ensure_items_unit_type_column(conn)
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS item_enrichment (
@@ -93,8 +95,8 @@ def save_invoice(conn: sqlite3.Connection, invoice: Invoice, items: list[Invoice
     invoice_id = int(cursor.lastrowid)
     conn.executemany(
         """
-        INSERT INTO items (invoice_id, raw_name, normalized_name, quantity, unit_price, total_price)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO items (invoice_id, raw_name, normalized_name, quantity, unit_type, unit_price, total_price)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         [
             (
@@ -102,6 +104,7 @@ def save_invoice(conn: sqlite3.Connection, invoice: Invoice, items: list[Invoice
                 item.raw_name,
                 item.normalized_name,
                 item.quantity,
+                item.unit_type,
                 item.unit_price,
                 item.total_price,
             )
@@ -121,21 +124,24 @@ def get_latest_invoice_id(conn: sqlite3.Connection) -> int | None:
         LIMIT 1
         """
     ).fetchone()
+    
     if not row:
         return None
+    
     return int(row["id"])
 
 
 def get_items_by_invoice(conn: sqlite3.Connection, invoice_id: int) -> list[sqlite3.Row]:
     rows = conn.execute(
         """
-        SELECT id, raw_name, normalized_name, quantity, unit_price, total_price
+        SELECT id, raw_name, normalized_name, quantity, unit_type, unit_price, total_price
         FROM items
         WHERE invoice_id = ?
         ORDER BY id
         """,
         (invoice_id,),
     ).fetchall()
+    
     return list(rows)
 
 
@@ -220,3 +226,9 @@ def _enrichment_to_dict(enrichment: Any) -> dict[str, Any]:
         return enrichment
     
     raise TypeError("Enrichment must be a dataclass instance or dict")
+
+
+def _ensure_items_unit_type_column(conn: sqlite3.Connection) -> None:
+    columns = [row["name"] for row in conn.execute("PRAGMA table_info(items)").fetchall()]
+    if "unit_type" not in columns:
+        conn.execute("ALTER TABLE items ADD COLUMN unit_type TEXT NULL")

@@ -85,9 +85,11 @@ def _extract_items_from_tab_result(soup: BeautifulSoup) -> list[InvoiceItem]:
             continue
 
         quantity_text = _extract_number_from_text(_get_text_from_selector(row, ".Rqtd"))
+        unit_text = _extract_unit_from_text(_get_text_from_selector(row, ".RUN"))
         unit_price_text = _extract_number_from_text(_get_text_from_selector(row, ".RvlUnit"))
 
         quantity = parse_brl_number(quantity_text) if quantity_text else None
+        unit_type = _normalize_invoice_unit(unit_text) if unit_text else None
         unit_price = parse_brl_number(unit_price_text) if unit_price_text else None
         total_price = parse_brl_number(total_text)
         if total_price is None:
@@ -97,6 +99,7 @@ def _extract_items_from_tab_result(soup: BeautifulSoup) -> list[InvoiceItem]:
             InvoiceItem(
                 raw_name=description,
                 quantity=quantity,
+                unit_type=unit_type,
                 unit_price=unit_price,
                 total_price=total_price,
                 normalized_name=normalize_product_name(description),
@@ -120,9 +123,20 @@ def _extract_number_from_text(text: str) -> str | None:
     return match.group(1)
 
 
+def _extract_unit_from_text(text: str) -> str | None:
+    if not text:
+        return None
+    # Examples: "UN: KG", "UN: FR"
+    match = re.search(r"([A-Za-z]{1,4})\s*$", text.strip())
+    if not match:
+        return None
+    return match.group(1)
+
+
 def _parse_row(cells: list[str], headers: list[str]) -> InvoiceItem | None:
     description = None
     quantity = None
+    unit_type = None
     unit_price = None
     total_price = None
 
@@ -135,6 +149,8 @@ def _parse_row(cells: list[str], headers: list[str]) -> InvoiceItem | None:
             description = value
         elif ("qtd" in header_norm or "quant" in header_norm) and quantity is None:
             quantity = parse_brl_number(value)
+        elif header_norm in {"un", "und", "unid"} and unit_type is None:
+            unit_type = _normalize_invoice_unit(value)
         elif ("unit" in header_norm or "preco" in header_norm or "vl unit" in header_norm) and unit_price is None:
             unit_price = parse_brl_number(value)
         elif ("total" in header_norm or "valor" in header_norm or "vl" in header_norm) and total_price is None:
@@ -156,6 +172,7 @@ def _parse_row(cells: list[str], headers: list[str]) -> InvoiceItem | None:
     return InvoiceItem(
         raw_name=description,
         quantity=quantity,
+        unit_type=unit_type,
         unit_price=unit_price,
         total_price=total_price,
         normalized_name=canonical_name,
@@ -207,3 +224,13 @@ def _extract_total_amount(soup: BeautifulSoup) -> float | None:
         if match:
             return parse_brl_number(match.group(1))
     return None
+
+
+def _normalize_invoice_unit(value: str) -> str | None:
+    raw = value.strip().upper()
+    if not raw:
+        return None
+    raw = re.sub(r"[^A-Z]", "", raw)
+    if not raw:
+        return None
+    return raw

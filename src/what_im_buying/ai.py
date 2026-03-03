@@ -7,6 +7,52 @@ from typing import Any
 from .categories import CATEGORY_LABELS_PTBR
 from .models import CategorizationEnrichment, NormalizationEnrichment
 
+CANONICAL_UNITS = {
+    "KG",
+    "UN",
+    "LT",
+    "CX",
+    "PC",
+    "FR",
+    "BJ",
+    "TP",
+    "BR",
+    "CP",
+    "GF",
+    "PT",
+    "SH",
+    "CJ",
+    "VD",
+}
+UNIT_FULL_NAMES = {
+    "KG": "QUILOGRAMA",
+    "UN": "UNIDADE",
+    "LT": "LITRO",
+    "CX": "CAIXA",
+    "PC": "PACOTE",
+    "FR": "FRASCO",
+    "BJ": "BANDEJA",
+    "TP": "TETRA PAK",
+    "BR": "BARRA",
+    "CP": "COPO",
+    "GF": "GARRAFA",
+    "PT": "POTE",
+    "SH": "SACHE",
+    "CJ": "CONJUNTO",
+    "VD": "VIDRO",
+}
+UNIT_ALIASES = {
+    "UNIT": "UN",
+    "UNITS": "UN",
+    "UNIDADE": "UN",
+    "UNIDADES": "UN",
+    "UND": "UN",
+    "PCS": "PC",
+    "EA": "UN",
+    "LITRO": "LT",
+    "LITROS": "LT",
+}
+
 
 def build_normalization_prompt(items: list[dict[str, Any]]) -> str:
     return (
@@ -19,10 +65,8 @@ def build_normalization_prompt(items: list[dict[str, Any]]) -> str:
         '      "raw_name": string,\n'
         '      "canonical_name": string,\n'
         '      "brand": string or null,\n'
-        '      "size_value": number or null,\n'
-        '      "size_unit": string or null,\n'
-        '      "pack_count": integer or null,\n'
         '      "unit_type": string or null,\n'
+        '      "unit_type_full": string or null,\n'
         '      "confidence": number,\n'
         '      "needs_review": boolean\n'
         "    }\n"
@@ -31,6 +75,8 @@ def build_normalization_prompt(items: list[dict[str, Any]]) -> str:
         "Rules:\n"
         "- Do not invent unknown data.\n"
         "- Keep canonical_name short and stable.\n"
+        f"- unit_type must be one of: {sorted(CANONICAL_UNITS)}.\n"
+        "- unit_type_full must match the full name of unit_type.\n"
         "- confidence must be between 0 and 1.\n"
         "- item_id must match input.\n\n"
         f"Input items: {json.dumps(items, ensure_ascii=True)}\n"
@@ -51,6 +97,7 @@ def generate_normalized_items(items: list[dict[str, Any]]) -> list[Normalization
         if not isinstance(row, dict):
             continue
         normalized.append(_normalization_from_dict(row))
+    
     return normalized
 
 
@@ -140,17 +187,22 @@ def _extract_json_object(text: str) -> dict[str, Any]:
 
 
 def _normalization_from_dict(data: dict[str, Any]) -> NormalizationEnrichment:
+    unit_type = _canonicalize_unit(data.get("unit_type"))
+    unit_type_full = UNIT_FULL_NAMES.get(unit_type) if unit_type else None
+    needs_review = bool(data.get("needs_review", False))
+
+    if data.get("unit_type") not in (None, "") and unit_type is None:
+        needs_review = True
+
     return NormalizationEnrichment(
         item_id=int(data["item_id"]),
         raw_name=str(data.get("raw_name", "")),
         canonical_name=str(data.get("canonical_name", "")),
         brand=str(data["brand"]) if data.get("brand") not in (None, "") else None,
-        size_value=float(data["size_value"]) if data.get("size_value") not in (None, "") else None,
-        size_unit=str(data["size_unit"]) if data.get("size_unit") not in (None, "") else None,
-        pack_count=int(data["pack_count"]) if data.get("pack_count") not in (None, "") else None,
-        unit_type=str(data["unit_type"]) if data.get("unit_type") not in (None, "") else None,
+        unit_type=unit_type,
         confidence=float(data.get("confidence", 0.0)),
-        needs_review=bool(data.get("needs_review", False)),
+        needs_review=needs_review,
+        unit_type_full=unit_type_full,
     )
 
 
@@ -158,9 +210,11 @@ def _categorization_from_dict(data: dict[str, Any]) -> CategorizationEnrichment:
     category_key = str(data.get("category_key", "other")).strip().lower() or "other"
     if category_key not in CATEGORY_LABELS_PTBR:
         category_key = "other"
+        
     needs_review = bool(data.get("needs_review", False))
     if category_key == "other":
         needs_review = True
+        
     return CategorizationEnrichment(
         item_id=int(data["item_id"]),
         raw_name=str(data.get("raw_name", "")),
@@ -170,3 +224,13 @@ def _categorization_from_dict(data: dict[str, Any]) -> CategorizationEnrichment:
         needs_review=needs_review,
         reason=str(data.get("reason", "")),
     )
+
+
+def _canonicalize_unit(value: Any) -> str | None:
+    if value in (None, ""):
+        return None
+    unit = str(value).strip().upper()
+    unit = UNIT_ALIASES.get(unit, unit)
+    if unit in CANONICAL_UNITS:
+        return unit
+    return None

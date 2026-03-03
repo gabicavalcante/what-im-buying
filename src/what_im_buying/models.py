@@ -8,6 +8,7 @@ from datetime import datetime
 class InvoiceItem:
     raw_name: str
     quantity: float | None
+    unit_type: str | None
     unit_price: float | None
     total_price: float
     normalized_name: str
@@ -27,12 +28,10 @@ class NormalizationEnrichment:
     raw_name: str
     canonical_name: str
     brand: str | None
-    size_value: float | None
-    size_unit: str | None
-    pack_count: int | None
     unit_type: str | None
     confidence: float
     needs_review: bool
+    unit_type_full: str | None = None
 
 
 @dataclass(slots=True)

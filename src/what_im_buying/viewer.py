@@ -24,7 +24,7 @@ def load_invoices(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 def load_items(conn: sqlite3.Connection, invoice_id: int) -> list[sqlite3.Row]:
     rows = conn.execute(
         """
-        SELECT id, raw_name, normalized_name, quantity, unit_price, total_price
+        SELECT id, raw_name, normalized_name, quantity, unit_type, unit_price, total_price
         FROM items
         WHERE invoice_id = ?
         ORDER BY id
@@ -166,6 +166,7 @@ def main() -> None:
                     "raw_name": item["raw_name"],
                     "canonical_name": normalized_by_item.get(item_id, {}).get("canonical_name", item["normalized_name"]),
                     "quantity": item["quantity"],
+                    "invoice_unit_type": item["unit_type"],
                     "unit_price_brl": format_brl(item["unit_price"]),
                     "total_price_brl": format_brl(total_price_value),
                     "_total_price_value": total_price_value,
