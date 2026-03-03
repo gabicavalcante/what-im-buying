@@ -176,6 +176,9 @@ def main() -> None:
                     "needs_review": cat.get("needs_review"),
                 }
             )
+        total_filtered = sum(float(item["_total_price_value"]) for item in merged_rows)
+        st.metric("Total gasto (filtro atual)", format_brl(total_filtered))
+
         table_rows = [{k: v for k, v in row.items() if k != "_total_price_value"} for row in merged_rows]
         st.dataframe(
             table_rows,
@@ -190,8 +193,6 @@ def main() -> None:
             summary[key]["count"] = int(summary[key]["count"]) + 1
             summary[key]["total_spend"] = float(summary[key]["total_spend"]) + float(item["_total_price_value"])
 
-        total_filtered = sum(float(item["_total_price_value"]) for item in merged_rows)
-        st.metric("Total gasto (filtro atual)", format_brl(total_filtered))
         st.caption("Summary (count and spend)")
         st.dataframe(
             [
