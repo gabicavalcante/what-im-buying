@@ -1,5 +1,5 @@
 beautifulsoup4==4.13.3
 requests==2.32.4
-python-dotenv==1.1.1
+python-dotenv==1.2.2
 openai==1.107.2
 streamlit==1.49.1
